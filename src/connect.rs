@@ -3,7 +3,7 @@ use std::{collections::VecDeque, future::Future, io, net::SocketAddr, time::Dura
 
 use futures_util::{stream::FuturesUnordered, StreamExt};
 use tokio::net::TcpStream;
-use tokio::time::{sleep_until, Instant};
+use tokio::time::{timeout_at, Instant};
 
 use tungstenite::{
     error::{Error, UrlError},
@@ -127,58 +127,35 @@ where
     F: FnMut(SocketAddr) -> Fut,
     Fut: Future<Output = io::Result<T>>,
 {
-    let mut addrs = interleave_addresses(addrs);
-    let Some(first_addr) = addrs.pop_front() else {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "could not resolve to any address",
-        ));
-    };
+    let mut addrs = interleave_addresses(addrs).into_iter();
+    let first_addr = addrs.next().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidInput, "could not resolve to any address")
+    })?;
 
     let mut attempts = FuturesUnordered::new();
     attempts.push(connect(first_addr));
     let mut next_attempt_at = Instant::now() + HAPPY_EYEBALLS_DELAY;
-    let mut last_err = None;
 
-    loop {
-        if addrs.is_empty() {
-            match attempts.next().await {
-                Some(Ok(stream)) => return Ok(stream),
-                Some(Err(err)) => {
-                    last_err = Some(err);
-                    if attempts.is_empty() {
-                        return Err(last_err.expect("an attempt just failed"));
-                    }
-                }
-                None => return Err(last_err.expect("at least one attempt was started")),
-            }
-            continue;
+    for next_addr in addrs {
+        let completed = timeout_at(next_attempt_at, attempts.next()).await.ok().flatten();
+
+        if let Some(Ok(stream)) = completed {
+            return Ok(stream);
         }
 
-        tokio::select! {
-            result = attempts.next() => {
-                match result {
-                    Some(Ok(stream)) => return Ok(stream),
-                    Some(Err(err)) => {
-                        last_err = Some(err);
-                        let next_addr = addrs.pop_front().expect("addresses checked above");
-                        attempts.push(connect(next_addr));
-                        next_attempt_at = Instant::now() + HAPPY_EYEBALLS_DELAY;
-                    }
-                    None => {
-                        let next_addr = addrs.pop_front().expect("addresses checked above");
-                        attempts.push(connect(next_addr));
-                        next_attempt_at = Instant::now() + HAPPY_EYEBALLS_DELAY;
-                    }
-                }
-            }
-            _ = sleep_until(next_attempt_at) => {
-                let next_addr = addrs.pop_front().expect("addresses checked above");
-                attempts.push(connect(next_addr));
-                next_attempt_at = Instant::now() + HAPPY_EYEBALLS_DELAY;
-            }
+        attempts.push(connect(next_addr));
+        next_attempt_at = Instant::now() + HAPPY_EYEBALLS_DELAY;
+    }
+
+    while let Some(result) = attempts.next().await {
+        match result {
+            Ok(stream) => return Ok(stream),
+            Err(err) if attempts.is_empty() => return Err(err),
+            Err(_) => {}
         }
     }
+
+    Err(io::Error::new(io::ErrorKind::Other, "connection attempt queue unexpectedly empty"))
 }
 
 fn interleave_addresses(addrs: Vec<SocketAddr>) -> VecDeque<SocketAddr> {
@@ -272,6 +249,22 @@ mod tests {
 
         assert_eq!(result, "ipv4");
         assert!(started.elapsed() < HAPPY_EYEBALLS_DELAY);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn returns_last_error_when_all_attempts_fail() {
+        let first = "[::1]:1".parse::<SocketAddr>().unwrap();
+        let second = "127.0.0.1:1".parse::<SocketAddr>().unwrap();
+
+        let err = happy_eyeballs_connect(vec![first, second], |addr| async move {
+            let message = if addr == first { "first" } else { "second" };
+            Err::<(), _>(io::Error::new(io::ErrorKind::ConnectionRefused, message))
+        })
+        .await
+        .unwrap_err();
+
+        assert_eq!(err.kind(), io::ErrorKind::ConnectionRefused);
+        assert_eq!(err.to_string(), "second");
     }
 
     #[tokio::test]
