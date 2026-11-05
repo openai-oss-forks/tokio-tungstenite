@@ -16,12 +16,12 @@ mod compat;
 #[cfg(feature = "connect")]
 mod connect;
 mod handshake;
+#[cfg(feature = "proxy")]
+pub mod proxy;
 #[cfg(feature = "stream")]
 mod stream;
 #[cfg(any(feature = "native-tls", feature = "__rustls-tls", feature = "connect"))]
 mod tls;
-#[cfg(feature = "proxy")]
-pub mod proxy;
 
 use std::io::{Read, Write};
 
