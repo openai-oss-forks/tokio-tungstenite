@@ -104,9 +104,7 @@ where
     let mut choice = [0u8; 2];
     stream.read_exact(&mut choice).await.map_err(Error::Io)?;
     if choice[0] != 0x05 {
-        return Err(Error::Url(UrlError::ProxyConnect(
-            "SOCKS5: invalid response version".into(),
-        )));
+        return Err(Error::Url(UrlError::ProxyConnect("SOCKS5: invalid response version".into())));
     }
 
     match choice[1] {
@@ -143,9 +141,7 @@ where
     let password = auth.password.as_bytes();
 
     if username.len() > u8::MAX as usize || password.len() > u8::MAX as usize {
-        return Err(Error::Url(UrlError::ProxyConnect(
-            "SOCKS5 auth credentials too long".into(),
-        )));
+        return Err(Error::Url(UrlError::ProxyConnect("SOCKS5 auth credentials too long".into())));
     }
 
     let mut buf = Vec::with_capacity(3 + username.len() + password.len());
@@ -161,9 +157,7 @@ where
     let mut response = [0u8; 2];
     stream.read_exact(&mut response).await.map_err(Error::Io)?;
     if response[0] != 0x01 || response[1] != 0x00 {
-        return Err(Error::Url(UrlError::ProxyConnect(
-            "SOCKS5 authentication failed".into(),
-        )));
+        return Err(Error::Url(UrlError::ProxyConnect("SOCKS5 authentication failed".into())));
     }
 
     Ok(())
@@ -187,9 +181,7 @@ where
     } else {
         let host_bytes = host.as_bytes();
         if host_bytes.len() > u8::MAX as usize {
-            return Err(Error::Url(UrlError::ProxyConnect(
-                "SOCKS5 domain name too long".into(),
-            )));
+            return Err(Error::Url(UrlError::ProxyConnect("SOCKS5 domain name too long".into())));
         }
         request.push(0x03);
         request.push(host_bytes.len() as u8);
@@ -203,9 +195,7 @@ where
     let mut header = [0u8; 4];
     stream.read_exact(&mut header).await.map_err(Error::Io)?;
     if header[0] != 0x05 {
-        return Err(Error::Url(UrlError::ProxyConnect(
-            "SOCKS5: invalid response version".into(),
-        )));
+        return Err(Error::Url(UrlError::ProxyConnect("SOCKS5: invalid response version".into())));
     }
 
     if header[1] != 0x00 {
@@ -223,11 +213,7 @@ where
             len[0] as usize
         }
         0x04 => 16,
-        _ => {
-            return Err(Error::Url(UrlError::ProxyConnect(
-                "SOCKS5: invalid address type".into(),
-            )))
-        }
+        _ => return Err(Error::Url(UrlError::ProxyConnect("SOCKS5: invalid address type".into()))),
     };
 
     let mut discard = vec![0u8; addr_len + 2];
@@ -259,7 +245,9 @@ mod tests {
         let n = server.read(&mut buf).await.unwrap();
         let request = &buf[..n];
         assert!(std::str::from_utf8(request).unwrap().contains("CONNECT example.com:443 HTTP/1.1"));
-        assert!(std::str::from_utf8(request).unwrap().contains("Proxy-Authorization: Basic dXNlcjpwYXNz"));
+        assert!(std::str::from_utf8(request)
+            .unwrap()
+            .contains("Proxy-Authorization: Basic dXNlcjpwYXNz"));
 
         server.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n").await.unwrap();
         client_task.await.unwrap();

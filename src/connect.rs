@@ -2,8 +2,10 @@
 use std::{collections::VecDeque, future::Future, io, net::SocketAddr, time::Duration};
 
 use futures_util::{stream::FuturesUnordered, StreamExt};
-use tokio::net::TcpStream;
-use tokio::time::{sleep_until, Instant};
+use tokio::{
+    net::TcpStream,
+    time::{sleep_until, Instant},
+};
 
 use tungstenite::{
     error::{Error, UrlError},
