@@ -1,4 +1,4 @@
-#![cfg(feature = "proxy")]
+#![cfg(all(feature = "connect", feature = "proxy"))]
 
 use std::env;
 
@@ -120,10 +120,7 @@ async fn spawn_ws_echo_server() -> (u16, tokio::task::JoinHandle<()>) {
     (port, handle)
 }
 
-async fn spawn_proxy(
-    proxy_env_key: &str,
-    target_addr: &str,
-) -> (u16, tokio::task::JoinHandle<()>) {
+async fn spawn_proxy(proxy_env_key: &str, target_addr: &str) -> (u16, tokio::task::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind proxy");
     let port = listener.local_addr().expect("addr").port();
     let target_addr = target_addr.to_string();
@@ -158,12 +155,10 @@ async fn handle_http_connect(mut client: TcpStream, target_addr: &str) {
     }
 
     let mut upstream = TcpStream::connect(target_addr).await.expect("connect upstream");
-    client
-        .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
-        .await
-        .expect("write");
+    client.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n").await.expect("write");
 
-    let _ = timeout(Duration::from_secs(2), io::copy_bidirectional(&mut client, &mut upstream)).await;
+    let _ =
+        timeout(Duration::from_secs(2), io::copy_bidirectional(&mut client, &mut upstream)).await;
 }
 
 async fn handle_socks5(mut client: TcpStream, target_addr: &str) {
@@ -206,10 +201,8 @@ async fn handle_socks5(mut client: TcpStream, target_addr: &str) {
     let _port = u16::from_be_bytes(port);
 
     let mut upstream = TcpStream::connect(target_addr).await.expect("connect upstream");
-    client
-        .write_all(&[0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
-        .await
-        .expect("write reply");
+    client.write_all(&[0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]).await.expect("write reply");
 
-    let _ = timeout(Duration::from_secs(2), io::copy_bidirectional(&mut client, &mut upstream)).await;
+    let _ =
+        timeout(Duration::from_secs(2), io::copy_bidirectional(&mut client, &mut upstream)).await;
 }

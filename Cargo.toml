@@ -112,4 +112,4 @@ required-features = ["handshake"]
 
 [[example]]
 name = "proxy-client"
-required-features = ["proxy"]
+required-features = ["connect", "proxy"]

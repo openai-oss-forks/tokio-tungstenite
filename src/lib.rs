@@ -16,12 +16,12 @@ mod compat;
 #[cfg(feature = "connect")]
 mod connect;
 mod handshake;
+#[cfg(feature = "proxy")]
+pub mod proxy;
 #[cfg(feature = "stream")]
 mod stream;
 #[cfg(any(feature = "native-tls", feature = "__rustls-tls", feature = "connect"))]
 mod tls;
-#[cfg(feature = "proxy")]
-pub mod proxy;
 
 use std::io::{Read, Write};
 
@@ -173,7 +173,8 @@ where
     C: Callback + Unpin,
 {
     let f = handshake::server_handshake(stream, move |allow_std| {
-        tungstenite::accept_hdr_with_config(allow_std, callback, config)
+        // Tungstenite needs an explicit config to decline extension offers during the handshake.
+        tungstenite::accept_hdr_with_config(allow_std, callback, Some(config.unwrap_or_default()))
     });
     f.await.map_err(|e| match e {
         HandshakeError::Failure(e) => e,
