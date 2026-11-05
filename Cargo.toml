@@ -36,7 +36,7 @@ tokio = { version = "1.0.0", default-features = false, features = ["io-util"] }
 
 [dependencies.tungstenite]
 git = "https://github.com/openai-oss-forks/tungstenite-rs"
-rev = "5f64848ef74dbf1182bdbce889781a289020d291"
+rev = "cfec7bb6e335c569279ce5c9b55a47ee62a0d7ba"
 default-features = false
 
 [dependencies.native-tls-crate]
